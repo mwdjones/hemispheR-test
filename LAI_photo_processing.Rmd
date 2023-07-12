@@ -1,0 +1,107 @@
+---
+title: "LAI_Analysis"
+author: "Mariel Jones"
+date: "2023-06-27"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, import the relevant packages. For each package below you need to (1) make sure the package has been downloaded from the internet and (2) uploaded to this environment so you can use it. To download the packages first run the *install.packages(-packagename-)* command. This only needs to be run once! Once you've run it, comment it out to save storage on your computer. To upload the package to your coding environment, use *library(-packagename-)*. This line needs to be run everytime you re-open this script.
+
+Run the block below. Don't worry if it spits out any kind of warning, those are just telling you that the package was built run under an older version of R and to use it with caution. It should run just fine.
+
+```{r cars}
+#Imports
+
+##Basic R packages
+#install.packages(tidyverse)
+#install.packages(dplyr)
+#install.packages(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+##Specifically for LAI
+#install.packages('hemispheR')
+library(hemispheR)
+```
+
+Next, we have to set up our workspace. This just means setting the file directories so R knows where to find the codes we want to run and the photos we want to process. To to this, click on the tab below that says *Files* you should see a lot of things on your computer and some check boxes. Click on the three dots in the upper right hand corner and use the file directory to navigate to the folder that I sent you. Hit *open*. Now you should see just the files that are in that folder; this RMD file, a folder of photos, and a separate script. Lastly, click on the *More* button next to the gear and select *Set as working directory*. This tells R that to look in this folder first for any files it needs.
+
+Good to go!
+
+Let's now try importing a photo. The function *import_fisheye* will pull in a picture and register it as an image for processing. The following command will run the function and store it as the variable 'img'. Don't feel the need to change anything in the function below except the numbers following 'circ.mask' if the red circle in the plotted image does not match the circular outline of the photo. In that case adjust xc (x coordinate of the centroid), yc (y coordinate of the centroid), and rc (radius of the circle) until the red outline matches the uploaded image.
+
+```{r}
+#Import Photo
+img <- import_fisheye('samples/sample1.jpg',
+                    channel = 3,
+                    circ.mask=list(xc=3000,yc=2000,rc=1450),
+                    circular=TRUE,
+                    gamma=2.2,
+                    stretch=FALSE,
+                    display=TRUE,
+                    message=TRUE)
+```
+
+The next step is to threshold the image. Thresholding essentially takes each pixel of the masked image from above and categorizes it as either 'canopy' or 'not canopy' based on the color intensity of the pixel.
+
+```{r}
+#Threshold Image
+img.bw <- binarize_fisheye(img,
+                         method='Otsu',
+                         zonal=FALSE,
+                         manual=NULL,
+                         display=TRUE,
+                         export=FALSE)
+```
+
+Almost there! The final step is to use the thresholded image to actually calculate LAI from this image. First, we have to invert the 'fisheye' curvature that the lens gave the photo, then we can calculate LAI. To invert the image we run the following function. The only specification we need to make here is the type of lens we used, which is a Sigma 4.5 lens.
+
+```{r}
+#Apply Rings
+gap.frac <- gapfrac_fisheye(
+  img.bw,
+  maxVZA = 90,
+  lens = "Sigma-4.5",
+  startVZA = 0,
+  endVZA = 70,
+  nrings = 7,
+  nseg = 8,
+  display=TRUE,
+  message = FALSE
+)
+```
+
+And then finally, calculate LAI.
+
+```{r}
+#Calculate LAI
+canopy <- canopy_fisheye(gap.frac)
+print(canopy)
+```
+
+This results in a tibble (R-speak for table) that holds a bunch od canopy-related values derived from the photo. The ones we are the most interested in are the effective (Le) and actual (L) LAI. We can now take these data and store them in a different data frame to analyze later.
+
+Now, let's say you have a whole folder full of photos and you don't want to run through this with each and every one but you just want to throw them all into a script and get out a nice data frame with the LAI from each image. Same. Been there. Needed that. Well, I have wrapped all of the steps above into a nice little script that you can find in this folder called *lai-batch.R*. To run this function we simply feed it a file path full of photos (only photos! no other documents in there!) and it will return to you a data frame with LAI values.
+
+Try this:
+
+```{r}
+#Tell R where to find the function to batch run LAI
+source("lai-batch.R")
+
+#Run batch function on all sample photos
+batch <- batchLAI('samples')
+print(batch)
+```
+
+It might take some time to run, but the result should be a table with a row for each photo processed.
+
+Hope this helps!
